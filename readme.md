@@ -42,33 +42,6 @@ Name | Discussion
 updateUrl | **Required**. The URL where your update zips are located.
 originalBuildId | **Required**. The build ID of the bundled/packaged version that the app shipped with.
 
-
-      afterUpdateAvailable: (current_id, latest_id)=>
-        d = Q.defer()
-        d.resolve()
-        d.promise
-      afterDownloadComplete: (current_id, latest_id)=>
-        d = Q.defer()
-        res = confirm(sprintf("Version %d is available for download (you are running %d). Update now?", latest_id, current_id))
-        if res?
-          d.resolve()
-        else
-          d.reject()
-        d.promise
-      afterInstallComplete: (current_id, latest_id)=>
-        d = Q.defer()
-        d.resolve()
-        d.promise
-      beforeReboot: (id_to_load)=>
-        d = Q.defer()
-        d.resolve()
-        d.promise
-      getCurrentBuildId: =>
-        Math.max(parseInt(localStorage.getItem(@options.localStorageVar)), @options.originalBuildId)
-      setCurrentBuildId: (build_id)=>
-        localStorage.setItem(@options.localStorageVar, build_id)
-      bundleRoot: cordova.file.dataDirectory
-
 The following options are sent to sensible defaults but can be overridden if custom behavior is needed.
 
 Name | Discussion
@@ -83,6 +56,34 @@ getCurrentBuildId | Function callback taking the form `function()`. Defaults to 
 setCurrentBuildId | Function callback taking the form `function(build_id)`. Defaults to local storage, override if you would like to do something else.
 localStorageVar | The variable name used to hold the current version number. Defaults to `buildno`. If you don't want to change the functions above, you can use this to alter just the variable name used.
 bundleRoot | The local file path to where bundles should be downloaded and unzipped. This must be a permanent storage location. Defaults to `cordova.file.dataDirectory`.
+
+Overriding `afterDownloadComplete` can be useful if you wish to override the default `confirm()` behavior. Here is an Ionic confirmation example:
+
+```
+afterDownloadComplete: function(currentId, latestId) {
+  var confirmPopup, d;
+  d = $q.defer();
+  confirmPopup = $ionicPopup.confirm({
+    title: 'Update Available',
+    template: sprintf("Version %d is available for download (you are running %d). Update now?", latestId, currentId),
+    buttons: [
+      {
+        text: 'Update Later',
+        onTap: (function() {
+          return d.reject();
+        })
+      }, {
+        text: 'Update Now',
+        type: 'button-positive',
+        onTap: (function() {
+          return d.resolve();
+        })
+      }
+    ]
+  });
+  return d.promise;
+}
+```
 
 ## go()
 

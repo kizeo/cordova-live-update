@@ -124,22 +124,17 @@
             return;
           }
           console.log("Update is requested");
-          _this.options.afterUpdateAvailable(current_build_id, latest_build_id).then(function() {
+          return _this.options.afterUpdateAvailable(current_build_id, latest_build_id).then(function() {
             return _this.download(latest_build_id);
           }).then(function() {
-            debugger;
             return _this.options.afterDownloadComplete(current_build_id, latest_build_id);
           }).then(function() {
-            debugger;
             return _this.install(latest_build_id);
           }).then(function() {
-            debugger;
             return _this.options.afterInstallComplete(current_build_id, latest_build_id);
           }).then(function() {
-            debugger;
             return _this.loadApp(latest_build_id);
           });
-          debugger;
         };
       })(this)).fail((function(_this) {
         return function(err) {
