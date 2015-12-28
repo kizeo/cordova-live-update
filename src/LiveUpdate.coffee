@@ -1,6 +1,7 @@
-File = require('qordova-file');
-Http = require('qordova-http');
-Zip = require('qordova-zip');    
+Q = require('q')
+File = require('qordova-file').File
+Http = require('qordova-http').Http
+Zip = require('qordova-zip').Zip
 msprintf = require('sprintf-js')
 sprintf = msprintf.sprintf
 extend = require('extend')
@@ -10,44 +11,96 @@ req = require('micro-req')
 class LiveUpdate
   constructor: (options) ->
     @options = {
-      updateUrl: "http://cordovaliveupdate.com/code",
-      appEntryPoint: 'app.html',
-      localStorageVar: 'buildno',
-      recheckTimeoutMs: 5000,
-      originalBuildId: 1,
-      shouldDownload: (current_id, latest_id)->
-        confirm(sprintf("Version %d is available for download (you are running %d). Update now?", latest_id, current_id))
+      updateUrl: "http://cordovaliveupdate.com/code"
+      appEntryPoint: 'app.html'
+      localStorageVar: 'buildno'
+      recheckTimeoutMs: 5000
+      originalBuildId: 1
+      afterUpdateAvailable: (current_id, latest_id)=>
+        d = Q.defer()
+        d.resolve()
+        d.promise
+      afterDownloadComplete: (current_id, latest_id)=>
+        d = Q.defer()
+        res = confirm(sprintf("Version %d is available for download (you are running %d). Update now?", latest_id, current_id))
+        if res?
+          d.resolve()
+        else
+          d.reject()
+        d.promise
+      afterInstallComplete: (current_id, latest_id)=>
+        d = Q.defer()
+        d.resolve()
+        d.promise
+      beforeReboot: (id_to_load)=>
+        d = Q.defer()
+        d.resolve()
+        d.promise
       getCurrentBuildId: =>
         Math.max(parseInt(localStorage.getItem(@options.localStorageVar)), @options.originalBuildId)
       setCurrentBuildId: (build_id)=>
         localStorage.setItem(@options.localStorageVar, build_id)
+      bundleRoot: cordova.file.dataDirectory
     }
     extend(@options, options)
     
-  checkRepeatedly: =>
-    @checkOnce()
-    .then(=>
-      setTimeout(@checkRepeatedly, @options.recheckTimeoutMs)
-    )
+  checkRepeatedly: (timeoutMs)=>
+    @keepChecking = true
+    again = =>
+      @checkOnce()
+      .then(=>
+        if(@keepChecking)
+          setTimeout(again, timeoutMs or @options.recheckTimeoutMs)
+      )
+      .fail((err)=>
+        console.log("Check failed", err)
+      )
+    again()
+  
+  stopCheckingRepeatedly: =>
+    @keepChecking = false
     
   checkOnce: =>
     d = Q.defer()
     current_build_id = @options.getCurrentBuildId()
     console.log("Current build version is ", current_build_id)
     @fetchLatestBuildInfo()
-      .then((latest_build_id)=>
-        if(latest_build_id != current_build_id)
-          if(@options.shouldDownload(current_build_id, latest_build_id))
-            @downloadAndInstall(latest_build_id)
-            .then(=>
-              @loadApp(latest_build_id)
-            )
-        else
-          console.log("We are running the latest version")
+    .then((latest_build_id)=>
+      if latest_build_id <= current_build_id
+        console.log("We have the latest build, no action needed")
+        return
+      console.log("Update is requested")
+      @options.afterUpdateAvailable(current_build_id, latest_build_id)
+      .then(=>
+        debugger
+        @download(latest_build_id)
       )
-      .finally(=>
-        d.resolve(current_build_id)
+      .then(=>
+        debugger
+        @options.afterDownloadComplete(current_build_id, latest_build_id)
       )
+      .then(=>
+        debugger
+        @install(latest_build_id)
+      )
+      .then(=>
+        debugger
+        @options.afterInstallComplete(current_build_id, latest_build_id)
+      )
+      .then(=>
+        debugger
+        @loadApp(latest_build_id)
+      )
+      debugger
+    )
+    .fail((err)=>
+      console.log("Check failed or was aborted", err)
+      d.reject(err)
+    )
+    .finally(=>
+      console.log("Done trying to download and install.")
+      d.resolve()
+    )
     d.promise
     
   go: =>
@@ -60,7 +113,7 @@ class LiveUpdate
   fetchLatestBuildInfo: =>
     deferred = Q.defer()
     console.log("Fetching latest build version info")
-    req(sprintf('%s/liveupdate.json', @options.updateUrl), {json: true}, ((err, response)->
+    req(sprintf('%s/liveupdate.json?r=%d', @options.updateUrl, (new Date()).getTime()), {json: true}, ((err, response)->
       if(response.statusCode == 200)
         latest_build_id = response.body
         console.log("Latest build is ", latest_build_id)
@@ -72,24 +125,28 @@ class LiveUpdate
     deferred.promise
     
   loadApp: (build_id)=>
+    return unless @options.beforeReboot(build_id)
     app_html = @options.appEntryPoint
     if(build_id)
-      new_app_html = sprintf("%s%s/%s", cordova.file.dataDirectory, build_id, @options.appEntryPoint)
+      new_app_html = sprintf("%s%s/%s", @options.bundleRoot, build_id, @options.appEntryPoint)
       File.exists(app_html)
       .then(->
         console.log("New app exists", new_app_html)
         app_html = new_app_html
+        console.log("Navigating to ", app_html)
+        window.location = app_html
       )
       .fail(->
         console.log("New app is missing, using default")
       )
-    console.log("Navigating to ", app_html)
-    window.location = app_html
+    else
+      console.log("Navigating to ", app_html)
+      window.location = app_html
     
-  downloadAndInstall: (build_id)=>
+  download: (build_id)=>
     deferred = Q.defer()
-    zip_fname = sprintf("%s%s.zip", cordova.file.dataDirectory, build_id)
-    unzip_dir = sprintf("%s%s", cordova.file.dataDirectory, build_id)
+    zip_fname = sprintf("%s%s.zip", @options.bundleRoot, build_id)
+    unzip_dir = sprintf("%s%s", @options.bundleRoot, build_id)
     url = sprintf("%s/%d.zip", @options.updateUrl, build_id)
     Q.all([File.rm(zip_fname),File.rm(unzip_dir)])
       .then(=>
@@ -101,14 +158,18 @@ class LiveUpdate
       .then(=>
         console.log("New build version is ", build_id)
         @options.setCurrentBuildId(build_id)
-      )
-      .fail(=>
-        console.log("Install failed", arguments)
-        deferred.reject()
-      )
-      .finally(=>
         deferred.resolve()
+      )
+      .fail((err)=>
+        console.log("Install failed", arguments)
+        deferred.reject(err)
       )
     deferred.promise
 
+  install: (build_id)=>
+    d = Q.defer()
+    console.log("New build version is ", build_id)
+    @options.setCurrentBuildId(build_id)
+    d.resolve()
+    d.promise
 module.exports = LiveUpdate
