@@ -5,17 +5,17 @@ Zip = require('qordova-zip').Zip
 msprintf = require('sprintf-js')
 sprintf = msprintf.sprintf
 extend = require('extend')
-req = require('micro-req')
+xhr = require('xhr')
 
 
 class LiveUpdate
   constructor: (options) ->
     @options = {
-      updateUrl: "http://cordovaliveupdate.com/code"
+      updateUrl: null
+      originalBuildId: null
       appEntryPoint: 'app.html'
       localStorageVar: 'buildno'
       recheckTimeoutMs: 5000
-      originalBuildId: 1
       afterUpdateAvailable: (current_id, latest_id)=>
         d = Q.defer()
         d.resolve()
@@ -43,17 +43,22 @@ class LiveUpdate
       bundleRoot: cordova.file.dataDirectory
     }
     extend(@options, options)
+    if(!@options.updateUrl || !@options.originalBuildId)
+      alert('LiveUpdater *requres* update URL and original build ID')
+      throw new Exception('LiveUpdater *requres* update URL and original build ID')
     
   checkRepeatedly: (timeoutMs)=>
     @keepChecking = true
     again = =>
       @checkOnce()
       .then(=>
-        if(@keepChecking)
-          setTimeout(again, timeoutMs or @options.recheckTimeoutMs)
       )
       .fail((err)=>
         console.log("Check failed", err)
+      )
+      .finally(=>
+        if(@keepChecking)
+          setTimeout(again, timeoutMs or @options.recheckTimeoutMs)
       )
     again()
   
@@ -72,26 +77,20 @@ class LiveUpdate
       console.log("Update is requested")
       @options.afterUpdateAvailable(current_build_id, latest_build_id)
       .then(=>
-        debugger
         @download(latest_build_id)
       )
       .then(=>
-        debugger
         @options.afterDownloadComplete(current_build_id, latest_build_id)
       )
       .then(=>
-        debugger
         @install(latest_build_id)
       )
       .then(=>
-        debugger
         @options.afterInstallComplete(current_build_id, latest_build_id)
       )
       .then(=>
-        debugger
         @loadApp(latest_build_id)
       )
-      debugger
     )
     .fail((err)=>
       console.log("Check failed or was aborted", err)
@@ -109,14 +108,18 @@ class LiveUpdate
       console.log("Loading app", arguments)
       @loadApp(build_id)
     )
+    .fail((err)=>
+      console.log("Check failed, loading current local build of app.", err)
+      @loadApp(@options.getCurrentBuildId())
+    )
     
   fetchLatestBuildInfo: =>
     deferred = Q.defer()
     console.log("Fetching latest build version info")
-    req(sprintf('%s/liveupdate.json?r=%d', @options.updateUrl, (new Date()).getTime()), {json: true}, ((err, response)->
+    xhr(sprintf('%s/liveupdate.json?r=%d', @options.updateUrl, (new Date()).getTime()), ((err, response, body)->
       if(response.statusCode == 200)
-        latest_build_id = response.body
-        console.log("Latest build is ", latest_build_id)
+        latest_build_id = JSON.parse(response.body)
+        console.log("Latest build on server is ", latest_build_id)
         deferred.resolve(latest_build_id)
       else
         console.log("Error fetching version info", err,response)
@@ -133,11 +136,13 @@ class LiveUpdate
       .then(->
         console.log("New app exists", new_app_html)
         app_html = new_app_html
-        console.log("Navigating to ", app_html)
-        window.location = app_html
       )
       .fail(->
         console.log("New app is missing, using default")
+      )
+      .finally(->
+        console.log("Navigating to ", app_html)
+        window.location = app_html
       )
     else
       console.log("Navigating to ", app_html)
@@ -172,4 +177,5 @@ class LiveUpdate
     @options.setCurrentBuildId(build_id)
     d.resolve()
     d.promise
+    
 module.exports = LiveUpdate

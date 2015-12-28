@@ -8,6 +8,7 @@ express.static.mime.define({
 
 app = express();
 port = process.env.BUNDLE_PORT || 4000;
-path = process.env.BUNDLE_TARGET || __dirname + '/liveupdate'
+path = process.env.BUNDLE_TARGET || require('process').cwd() + '/liveupdate'
+console.log(path, port)
 app.use(express.static(path));
 app.listen(port);
