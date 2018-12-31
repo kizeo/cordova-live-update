@@ -2,20 +2,7 @@
 
 `cordova-live-update` provides secure over-the-air web stack updates for Cordova applications. Many updates to hybrid applications involve
 only web stack (JavaScript/HTML/CSS/fonts) changes and no native code changes at all. With this package, you can provide your users convenient
-updates.
-
-It works like this:
-
-1. Include this library in your Cordova/Ionic application
-2. Perform a periodic check by calling `LiveUpdater.go()`
-3. `LiveUpdater` will download, install, and then run updated code bundles
-
-What's included in the bundles? For now, everything. I am looking at ways of providing secure deltas for reduced bandwidth, but for now the
-entire zip bundle of web stack logic is transmitted in the update.
-
-A major security concern for live updates is the [man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack) whereby some attacker
-pretends to serve an updated zip that is infact malaicious code. Until I implement code signing, I recommend using this package only during
-development and on trusted networks.
+OTA updates like Expo does!
 
 # Installation
 
@@ -25,34 +12,25 @@ development and on trusted networks.
 
 ```
 // Note that we must wrap inside `deviceready` because it uses Cordova features.
-document.addEventListener("deviceready", (function() {
-  updater = new LiveUpdate({...options, see below...});
+document.addEventListener("deviceready", (()=> {
+  updater = new LiveUpdate(options);
   updater.go(); // Check for updates, install, and then launch
-}), false);
+}), false)
 ```
 
-# Configuration
-
-Supply these options to the LiveUpdate constructor.
-
-The following options are required.
+# Options
 
 Name | Discussion
 ---- | ----------
 updateUrl | **Required**. The URL where your update zips are located.
 originalBuildId | **Required**. The build ID of the bundled/packaged version that the app shipped with.
-
-The following options are sent to sensible defaults but can be overridden if custom behavior is needed.
-
-Name | Discussion
----- | ----------
 appEntryPoint | The entry point to use when running your updated app. Defaults to `app.html`
 recheckTimeoutMs | When LiveUpdate is set to check for udpates repeatedly, it will use this timeout between rechecks. Default 5 seconds. Note that this delay will happen between the end of one checkout and the beginning of the next.
 afterUpdateAvailable | Called when an update is available. Override by returning a promise that resolves if LiveUpdate should proceed with downloading and rejects if LiveUpdate should not proceed with downloading.
 afterDownloadComplete  | Called when download and unzip is complete. Override by returning a promise that resolves if LiveUpdate should proceed with installation and rejects if LiveUpdate should not proceed with installation.
 afterInstallComplete | Called after installation has finished. At this point, an application reboot will load the new version. Override by returning a promise that resolves if LiveUpdate should proceed to the reboot step or rejects if LiveUpdate should proceed to the reboot step.
 beforeReboot | Called before LiveUpdate reboots the application. Override with a promise that resolves if LiveUpdater should reboot and rejects if LiveUpdater should not reboot.
-getCurrentBuildId | Function callback taking the form `function()`. Defaults to getting and setting build number from local storage, override if you would like to do something else.
+getCurrentBuildId | Function callback. Defaults to getting and setting build number from local storage, override if you would like to do something else.
 setCurrentBuildId | Function callback taking the form `function(build_id)`. Defaults to local storage, override if you would like to do something else.
 localStorageVar | The variable name used to hold the current version number. Defaults to `buildno`. If you don't want to change the functions above, you can use this to alter just the variable name used.
 bundleRoot | The local file path to where bundles should be downloaded and unzipped. This must be a permanent storage location. Defaults to `cordova.file.dataDirectory`.
@@ -60,7 +38,7 @@ bundleRoot | The local file path to where bundles should be downloaded and unzip
 Overriding `afterDownloadComplete` can be useful if you wish to override the default `confirm()` behavior. Here is an Ionic confirmation example:
 
 ```
-afterDownloadComplete: function(currentId, latestId) {
+afterDownloadComplete: (currentId, latestId) => {
   var confirmPopup, d;
   d = $q.defer();
   confirmPopup = $ionicPopup.confirm({
@@ -84,6 +62,8 @@ afterDownloadComplete: function(currentId, latestId) {
   return d.promise;
 }
 ```
+
+# Methods
 
 ## go()
 
@@ -152,3 +132,19 @@ Lastly, you need to configure `LiveUpdater` to use your local testing environmen
 ## Hosting Bundles
 
 Hosting bundles for production use is not recommended until code signing. That said, `LiveUpdater` will happily check and download bundles from any URL you specify.
+
+## Extra
+
+
+It works like this:
+
+1. Include this library in your Cordova-based application
+2. Perform a periodic check by calling `LiveUpdater.go()`
+3. `LiveUpdater` will download, install, and then run updated code bundles
+
+What's included in the bundles? For now, everything. I am looking at ways of providing secure deltas for reduced bandwidth, but for now the
+entire zip bundle of web stack logic is transmitted in the update.
+
+A major security concern for live updates is the [man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack) whereby some attacker
+pretends to serve an updated zip that is infact malaicious code. Until I implement code signing, I recommend using this package only during
+development and on trusted networks.
