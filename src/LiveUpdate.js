@@ -1,14 +1,26 @@
 import axios from 'axios'
-const { confirm, localStorage, cordova, alert, File, Zip, Http } = window
+
+const {
+  LIVEUPDATE,
+  confirm,
+  localStorage,
+  cordova,
+  alert,
+  File,
+  Zip,
+  Http,
+} = window
 
 class LiveUpdate {
+  checkId = null
+
   constructor(options) {
     this.options = {
       updateUrl: null,
       originalBuildId: null,
       appEntryPoint: 'app.html',
       localStorageVar: 'buildno',
-      recheckTimeoutMs: 5000,
+      recheckTimeoutMs: 500,
       afterUpdateAvailable: async (currentId, latestId) => {},
       afterDownloadComplete: (currentId, latestId) => {
         return new Promise((resolve, reject) => {
@@ -24,48 +36,35 @@ class LiveUpdate {
       },
       afterInstallComplete: async (currentId, latestId) => {},
       beforeReboot: async idToLoad => {},
-      getCurrentBuildId: () => {
-        return Math.max(
-          parseInt(localStorage.getItem(this.options.localStorageVar)),
-          this.options.originalBuildId,
-        )
-      },
+      currentBuildId: 0,
       setCurrentBuildId: buildId => {
         return localStorage.setItem(this.options.localStorageVar, buildId)
       },
       bundleRoot: cordova.file.dataDirectory,
       ...options,
     }
+
     if (!this.options.updateUrl || !this.options.originalBuildId) {
       alert('LiveUpdater *requres* update URL and original build ID')
       throw new Error('LiveUpdater *requres* update URL and original build ID')
     }
   }
 
-  checkRepeatedly(timeoutMs) {
-    this.keepChecking = true
-    var again = () => {
-      return this.checkOnce()
-        .then(() => {})
-        .catch(err => {
-          return console.log('Check failed', err)
-        })
-        .finally(() => {
-          if (this.keepChecking) {
-            return setTimeout(again, timeoutMs || this.options.recheckTimeoutMs)
-          }
-        })
-    }
-    return again()
+  checkRepeatedly(timeoutMs = null) {
+    this.checkId = setInterval(() => {
+      console.log('Check failed', err)
+      console.log('Check failed', err)
+    }, timeoutMs || this.options.recheckTimeoutMs)
   }
 
   stopCheckingRepeatedly() {
-    return (this.keepChecking = false)
+    clearInterval(this.checkId)
+    this.checkid = null
   }
 
   checkOnce() {
     return new Promise((resolve, reject) => {
-      const currentBuildId = this.options.getCurrentBuildId()
+      const { currentBuildId } = this.options
       console.log('Current build version is ', currentBuildId)
       this.fetchLatestBuildInfo()
         .then(latestBuildId => {
@@ -180,4 +179,16 @@ class LiveUpdate {
   }
 }
 
-export { LiveUpdate }
+function startLiveUpdating(config = {}) {
+  const updater = new LiveUpdate({
+    currentBuildId: LIVEUPDATE.build,
+    ...config,
+  })
+  if (NODE_ENV === 'development') {
+    updater.checkRepeatedly()
+  } else {
+    updater.checkRepeatedly(1000 * 60 * 100)
+  }
+}
+
+export { LiveUpdate, startLiveUpdating }

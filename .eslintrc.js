@@ -4,5 +4,8 @@ module.exports = {
     "parser": "babel-eslint",
     "rules": {
         "prettier/prettier": "error"
+    },
+    "globals": {
+        "NODE_ENV": true,
     }
 };

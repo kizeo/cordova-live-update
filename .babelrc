@@ -1,12 +1,10 @@
 {
   "presets": [
-    "@babel/preset-env",
-    "@babel/preset-react"
+    "@babel/preset-env"
   ],
   "plugins": [
     "@babel/plugin-proposal-export-namespace-from",
     "@babel/plugin-proposal-export-default-from",
-    "@babel/plugin-transform-react-jsx",
     [
       "@babel/plugin-proposal-decorators",
       {
@@ -19,5 +17,6 @@
         "loose": true
       }
     ],
+    "@babel/plugin-transform-runtime",
   ]
 }
