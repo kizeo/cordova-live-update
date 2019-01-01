@@ -7,5 +7,6 @@ module.exports = {
     },
     "globals": {
         "NODE_ENV": true,
+        "LIVEUPDATE": true,
     }
 };

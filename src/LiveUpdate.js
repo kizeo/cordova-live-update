@@ -1,16 +1,5 @@
 import axios from 'axios'
 
-const {
-  LIVEUPDATE,
-  confirm,
-  localStorage,
-  cordova,
-  alert,
-  File,
-  Zip,
-  Http,
-} = window
-
 class LiveUpdate {
   checkId = null
 
