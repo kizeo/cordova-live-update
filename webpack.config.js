@@ -9,6 +9,7 @@ const libraryConfig = {
   mode: 'development',
   output: {
     path: path.resolve(__dirname, 'dist'),
+    libraryTarget: 'umd',
   },
   module: {
     rules: [
