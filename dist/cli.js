@@ -50,7 +50,7 @@ function simpleReadFileSync(filePath) {
 (0, _asyncToGenerator2.default)(
 /*#__PURE__*/
 _regenerator.default.mark(function _callee3() {
-  var rootConfig, ROOT, ip, ifaces, dev, iface, build, buildWatch;
+  var rootConfig, ROOT, externalIp, ifaces, dev, iface, build, buildWatch;
   return _regenerator.default.wrap(function _callee3$(_context3) {
     while (1) {
       switch (_context3.prev = _context3.next) {
@@ -74,7 +74,7 @@ _regenerator.default.mark(function _callee3() {
             }, liveInfo);
             var finalInfoSerialized = JSON.stringify(finalInfo, null, 2);
             var lib = simpleReadFileSync(_path.default.join(__dirname, './LiveUpdate.js'));
-            var buildInfo = "\n    ".concat(lib, "\n    document.addEventListener(\"deviceready\", (()=> {\n      LiveUpdate.startLiveUpdating(").concat(finalInfoSerialized, ")\n    }), false)\n    ");
+            var buildInfo = "\n    ".concat(lib, "\n    LiveUpdater.buildManifest = ").concat(finalInfoSerialized, ";\n    document.addEventListener(\"deviceready\", (()=> {\n      const liveUpdater = LiveUpdater(LiveUpdater.buildManifest);\n      liveUpdater.checkRepeatedly();\n    }), false)\n    ");
             console.log("Running 'cordova prepare'");
             var prepare = (0, _child_process.exec)('cordova prepare', {
               cwd: ROOT
@@ -114,7 +114,7 @@ _regenerator.default.mark(function _callee3() {
                     console.log("Writing LiveInfo client bootstrap:\n".concat(finalInfoSerialized));
                     simpleWriteFileSync(buildFilePath, buildInfo);
                     console.log('Writing LiveInfo server meta');
-                    simpleWriteFileSync("".concat(buildDirectory, "/liveinfo.json"), finalInfoSerialized);
+                    simpleWriteFileSync("".concat(buildDirectory, "/liveupdate.json"), finalInfoSerialized);
                   });
                   output.on('end', function () {
                     console.log('Data has been drained');
@@ -149,29 +149,33 @@ _regenerator.default.mark(function _callee3() {
         case 7:
           ROOT = _path.default.dirname(rootConfig);
           console.log("Cordova root is ".concat(ROOT));
-          ip = null;
+          externalIp = null;
           ifaces = _os.default.networkInterfaces();
 
           for (dev in ifaces) {
             iface = ifaces[dev].filter(function (details) {
               return details.family === 'IPv4' && details.internal === false;
             });
-            if (iface.length > 0) ip = iface[0].address;
+            if (iface.length > 0) externalIp = iface[0].address;
           }
 
-          console.log("External IP looks like: ".concat(ip));
+          console.log("External IP looks like: ".concat(externalIp));
 
-          _commander.default.command('serve').option('-h, --host [host]', 'Host [0.0.0.0]', '0.0.0.0').option('-p, --port [port]', 'Port [4000]', '4000').option('-w, --watch [directory]', 'Directory to watch for changes [www]', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory (webroot) [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).option('-e, --external [url]', 'The external URL of this dev server [http://{$ip}:4000]', null).action(
+          _commander.default.command('serve').option('-h, --host [host]', 'Host [0.0.0.0]', null).option('-p, --port [port]', 'Port [4000]', '4000').option('-w, --watch [directory]', 'Directory to watch for changes [www]', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory (webroot) [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).action(
           /*#__PURE__*/
           function () {
             var _ref2 = (0, _asyncToGenerator2.default)(
             /*#__PURE__*/
             _regenerator.default.mark(function _callee(cmd) {
-              var app, updateUrl;
+              var host, port, updateUrl, app;
               return _regenerator.default.wrap(function _callee$(_context) {
                 while (1) {
                   switch (_context.prev = _context.next) {
                     case 0:
+                      host = cmd.host || '0.0.0.0';
+                      port = cmd.port;
+                      updateUrl = "http://".concat(cmd.host || externalIp, ":").concat(port);
+
                       _express.default.static.mime.define({
                         'application/json': ['json'],
                         'application/zip': ['zip']
@@ -179,24 +183,17 @@ _regenerator.default.mark(function _callee3() {
 
                       app = (0, _express.default)();
                       app.use(_express.default.static(cmd.directory));
-                      app.listen(cmd.port, cmd.host);
+                      app.listen(port, host);
                       app.get('/', function (req, res) {
                         res.setHeader('Content-Type', 'application/json');
                         res.send(simpleReadFileSync("".concat(cmd.directory, "/liveinfo.json")));
                       });
-                      updateUrl = cmd.external;
-
-                      if (~updateUrl) {
-                        updateUrl = "http://".concat(ip, ":").concat(cmd.port);
-                      }
-
                       buildWatch(cmd.watch, cmd.directory, {
-                        updateUrl: updateUrl,
-                        recheckTimeoutMs: 500
+                        updateUrl: updateUrl
                       });
-                      console.log("Serving http://".concat(cmd.host, ":").concat(cmd.port, " from ").concat(cmd.directory));
+                      console.log("Listening on http://".concat(host, ":").concat(port, " from ").concat(cmd.directory));
 
-                    case 9:
+                    case 10:
                     case "end":
                       return _context.stop();
                   }

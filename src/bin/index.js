@@ -31,15 +31,15 @@ function simpleReadFileSync(filePath) {
   const ROOT = path.dirname(rootConfig)
   console.log(`Cordova root is ${ROOT}`)
 
-  let ip = null
+  let externalIp = null
   let ifaces = os.networkInterfaces()
   for (let dev in ifaces) {
     const iface = ifaces[dev].filter(function(details) {
       return details.family === 'IPv4' && details.internal === false
     })
-    if (iface.length > 0) ip = iface[0].address
+    if (iface.length > 0) externalIp = iface[0].address
   }
-  console.log(`External IP looks like: ${ip}`)
+  console.log(`External IP looks like: ${externalIp}`)
 
   function build(buildFilePath, buildDirectory, liveInfo) {
     const finalInfo = {
@@ -50,8 +50,10 @@ function simpleReadFileSync(filePath) {
     const lib = simpleReadFileSync(path.join(__dirname, './LiveUpdate.js'))
     const buildInfo = `
     ${lib}
+    LiveUpdater.buildManifest = ${finalInfoSerialized};
     document.addEventListener("deviceready", (()=> {
-      LiveUpdate.startLiveUpdating(${finalInfoSerialized})
+      const liveUpdater = LiveUpdater(LiveUpdater.buildManifest);
+      liveUpdater.checkRepeatedly();
     }), false)
     `
     console.log(`Running 'cordova prepare'`)
@@ -89,7 +91,7 @@ function simpleReadFileSync(filePath) {
             simpleWriteFileSync(buildFilePath, buildInfo)
             console.log('Writing LiveInfo server meta')
             simpleWriteFileSync(
-              `${buildDirectory}/liveinfo.json`,
+              `${buildDirectory}/liveupdate.json`,
               finalInfoSerialized,
             )
           })
@@ -126,7 +128,7 @@ function simpleReadFileSync(filePath) {
 
   program
     .command('serve')
-    .option('-h, --host [host]', 'Host [0.0.0.0]', '0.0.0.0')
+    .option('-h, --host [host]', 'Host [0.0.0.0]', null)
     .option('-p, --port [port]', 'Port [4000]', '4000')
     .option(
       '-w, --watch [directory]',
@@ -138,34 +140,25 @@ function simpleReadFileSync(filePath) {
       'Target bundle directory (webroot) [<project root>/liveupdate]',
       path.join(ROOT, 'liveupdate'),
     )
-    .option(
-      '-e, --external [url]',
-      'The external URL of this dev server [http://{$ip}:4000]',
-      null,
-    )
     .action(async cmd => {
+      const host = cmd.host || '0.0.0.0'
+      const port = cmd.port
+      const updateUrl = `http://${cmd.host || externalIp}:${port}`
       express.static.mime.define({
         'application/json': ['json'],
         'application/zip': ['zip'],
       })
       const app = express()
       app.use(express.static(cmd.directory))
-      app.listen(cmd.port, cmd.host)
+      app.listen(port, host)
       app.get('/', (req, res) => {
         res.setHeader('Content-Type', 'application/json')
         res.send(simpleReadFileSync(`${cmd.directory}/liveinfo.json`))
       })
-      let updateUrl = cmd.external
-      if (~updateUrl) {
-        updateUrl = `http://${ip}:${cmd.port}`
-      }
       buildWatch(cmd.watch, cmd.directory, {
         updateUrl,
-        recheckTimeoutMs: 500,
       })
-      console.log(
-        `Serving http://${cmd.host}:${cmd.port} from ${cmd.directory}`,
-      )
+      console.log(`Listening on http://${host}:${port} from ${cmd.directory}`)
     })
 
   program

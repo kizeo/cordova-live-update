@@ -6,17 +6,22 @@ class LiveUpdater {
   constructor(options) {
     this.options = {
       updateUrl: null,
-      originalBuildId: null,
       appEntryPoint: 'index.html',
       localStorageVar: 'liveupdate',
       recheckTimeoutMs: 1000 * 60 * 10,
       currentBuildId: 0,
       bundleRoot: cordova.file.dataDirectory,
-      onUpdateAvailable: async (currentId, latestId) => {},
-      onDownloadComplete: (currentId, latestId) => {
+      onUpdateAvailable: buildInfo => {},
+      onNoUpdateAvailable: buildInfo => {},
+      onUpdateFailed: err => {},
+      onDownloadComplete: buildInfo => {
         return new Promise((resolve, reject) => {
           const res = confirm(
-            `Version ${latestId} is available for download (you are running ${currentId}). Update now?`,
+            `Version ${
+              buildInfo.currentBuildId
+            } is available for download (you are running ${
+              window.LiveUpdater.currentBuildId
+            }). Update now?`,
           )
           if (res != null) {
             resolve()
@@ -25,14 +30,12 @@ class LiveUpdater {
           }
         })
       },
-      onInstallComplete: async (currentId, latestId) => {},
-      onReboot: async idToLoad => {},
+      onInstallComplete: buildInfo => {},
+      onReboot: idToLoad => {},
       ...options,
     }
-
-    if (!this.options.updateUrl || !this.options.originalBuildId) {
-      alert('LiveUpdater *requres* update URL and original build ID')
-      throw new Error('LiveUpdater *requres* update URL and original build ID')
+    if (!this.options.updateUrl || !this.options.currentBuildId) {
+      throw new Error('LiveUpdater *requires* update URL and build ID')
     }
   }
 
@@ -50,31 +53,35 @@ class LiveUpdater {
   checkRepeatedly(timeoutMs = null) {
     const check = async () => {
       await this.checkOnce()
-      setTimeout(check)
+      setTimeout(check, timeoutMs || this.options.recheckTimeoutMs)
     }
     setTimeout(check, timeoutMs || this.options.recheckTimeoutMs)
-  }
-
-  stopCheckingRepeatedly() {
-    clearInterval(this.checkId)
-    this.checkid = null
+    check()
   }
 
   async checkOnce() {
     const { currentBuildId } = this.options
-    console.log('Current build version is ', currentBuildId)
-    const latestBuildId = await this.fetchLatestBuildInfo()
-    if (latestBuildId <= currentBuildId) {
-      console.log('We have the latest build, no action needed')
-      return
+    console.log('Local build is ', currentBuildId)
+    try {
+      const buildInfo = await this.fetchLatestBuildInfo()
+      const latestBuildId = buildInfo.currentBuildId
+      console.log('Remote build is', latestBuildId)
+      if (latestBuildId === currentBuildId) {
+        console.log('We have the current build, no action needed')
+        this.options.onNoUpdateAvailable()
+        return
+      }
+      console.log('Update is requested')
+      await this.options.onUpdateAvailable(buildInfo)
+      await this.download(buildInfo)
+      await this.options.onDownloadComplete(buildInfo)
+      await this.install(buildInfo)
+      await this.options.onInstallComplete(buildInfo)
+      await this.loadApp(buildInfo)
+    } catch (err) {
+      console.error('Remote update failed', err)
+      this.options.onUpdateFailed(err)
     }
-    console.log('Update is requested')
-    await this.options.onUpdateAvailable(currentBuildId, latestBuildId)
-    await this.download(latestBuildId)
-    await this.options.onDownloadComplete(currentBuildId, latestBuildId)
-    await this.install(latestBuildId)
-    await this.options.onInstallComplete(currentBuildId, latestBuildId)
-    await this.loadApp(latestBuildId)
   }
 
   async go() {
@@ -92,9 +99,11 @@ class LiveUpdater {
     console.log('Fetching latest build version info')
     const response = await axios.get(
       `${this.options.updateUrl}/liveupdate.json?r=${new Date().getTime()}`,
+      {
+        timeout: 1000,
+      },
     )
     const buildInfo = response.data
-    console.log('Latest build on server is ', buildInfo.currentBuildId)
     return buildInfo
   }
 
@@ -139,9 +148,7 @@ class LiveUpdater {
   }
 }
 
-function startLiveUpdating(config = {}) {
-  const updater = new LiveUpdater({ config, ...window.LIVEUPDATE })
-  updater.checkRepeatedly()
+function factory(config = {}) {
+  return new LiveUpdater(config)
 }
-
-export { LiveUpdater, startLiveUpdating }
+export { factory as LiveUpdater }
