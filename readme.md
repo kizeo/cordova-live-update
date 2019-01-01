@@ -8,7 +8,10 @@ OTA updates like Expo does!
 
 # Installation
 
-`npm install cordova-live-update`
+```
+cordova plugin add cordova-plugin-file
+npm install cordova-live-update
+```
 
 # Basic Usage
 
