@@ -35,7 +35,7 @@ let liveInfo = {
 
   function build(buildFilePath, buildDirectory) {
     liveInfo.build = new Date().getTime()
-    const buildInfo = `const LIVEUPDATE=${JSON.stringify(liveInfo)};`
+    const buildInfo = `window.LIVEUPDATE=${JSON.stringify(liveInfo)};`
     console.log(`Running 'cordova prepare'`)
     const prepare = exec('cordova prepare', { cwd: ROOT }, function(
       err,

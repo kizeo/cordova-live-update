@@ -66,7 +66,7 @@ _regenerator.default.mark(function _callee3() {
 
           build = function _ref4(buildFilePath, buildDirectory) {
             liveInfo.build = new Date().getTime();
-            var buildInfo = "const LIVEUPDATE=".concat(JSON.stringify(liveInfo), ";");
+            var buildInfo = "window.LIVEUPDATE=".concat(JSON.stringify(liveInfo), ";");
             console.log("Running 'cordova prepare'");
             var prepare = (0, _child_process.exec)('cordova prepare', {
               cwd: ROOT
