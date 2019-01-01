@@ -6,24 +6,93 @@
 only web stack (JavaScript/HTML/CSS/fonts) changes and no native code changes at all. With this package, you can provide your users convenient
 OTA updates like Expo does!
 
-# Installation
+`cordova-live-update` also ships with a local server for hot reloading during development.
+
+# Quickstart
+
+```bash
+npm i -g cordova-live-update
+```
+
+Generate and upload your first bundle to wherever you want to host it:
+
+```bash
+cd /my/vordova/app/root
+liveupdate build -u http://my-liveupdate-host.com
+rsync liveupdate/* user@my-live-update-host.com:/var/www
+```
+
+When you ran this, `liveupdate build` also generated a client stub for you in `www/liveupdate.js`. Reference it in  `www/index.html`:
+
+```html
+<script type="text/javascript" src="liveupdate.js"></script>
+```
+
+Install a couple native dependencies then run your app as usual:
 
 ```
 cordova plugin add cordova-plugin-file
-npm install cordova-live-update
+cordova run ios
 ```
 
-# Basic Usage
+Next time you want to release an update to your app, just push a new bundle using `liveupdate build` and all your apps will update automatically!
 
-```
-// Note that we must wrap inside `deviceready` because it uses Cordova features.
-document.addEventListener("deviceready", (()=> {
-  updater = new LiveUpdate(options);
-  updater.go(); // Check for updates, install, and then launch
-}), false)
+Pretty slick.
+
+# Local Development
+
+But it gets even better. What about using it for hot reloading during development? Of course you can!
+
+`cordova-live-update` ships with hot reloading capabilities for rapid development. 
+
+```bash
+liveupdate serve
 ```
 
-# Options
+In this mode, `liveupdate` generates a `www/liveupdate.js` stub that points to this local server instead. `liveupdate serve` will monitor for source code changes, generate intermediate bundles, and instantly load the changes in your app without needing to recompile and restart.
+
+Run your app as usual:
+
+```bash
+cordova run ios
+```
+
+Troubleshooting: `liveupdate serve` will work from any device on your LAN/WAN. It attempts to identify the host machine's external LAN/WAN IP. If `liveupdate serve` reports `External IP looks like: 192.168.1.4`, try browsing to `http://192.168.1.4/liveupdate.json` from another device and see if it answers. If there is no answer, you likely have a firewall issue or `liveupdate serve` was not able to identify the correct IP. In that case, use extended options:
+
+```bash
+liveupdate serve -h <host> -p <port> -e <external IP>
+```
+
+
+
+
+# Advanced Topics
+
+## Local Server External IP
+## Beta Tesing and Test Groups
+## What happens when updates fail?
+## What happens when apps are re-installed?
+## Bundle archiving and maintenance
+## Where to ost your bundles
+## HMR
+## Overriding `startLiveUpdating`
+window.LIVEUPDATE={
+  ...options
+}
+or modify before deviceready
+    LiveUpdate.startLiveUpdating=function(options) {...}
+## Migrating to a new live URL
+## Native Platform Updates
+  recommend minor versions for JS, major versions for native updates
+
+
+# `build` options
+
+# 'serve' options
+
+# startLiveUpdating(*options*)
+
+`startLiveUpdating()` is very configurable.
 
 Name | Discussion
 ---- | ----------
@@ -67,89 +136,3 @@ afterDownloadComplete: (currentId, latestId) => {
   return d.promise;
 }
 ```
-
-# Methods
-
-## go()
-
-Check for updates, install, and then launch.
-
-## checkOnce
-
-Check for an update. If the update is 
-
-```
-updater.checkOnce()
-.then(function(current\_build\_id) {
-  console.log("The current build ID is", current\_build\_id);
-});
-```
-
-## checkRepeatedly
-
-Check for updates repeatedly. Useful for debugging mode. 
-
-```
-updater.checkRepeatedly();
-```
-
-# Creating, Testing, and Hosting Bundles
-
-When you install the `cordova-live-update` package, it installs a few utilities in `node_modules/.bin` to help you create and test bundles.
-
-By default, `cordova-live-update` will create bundles from what exists in `platforms/ios/www` and assign build IDs based on timestamps. If you want to do something different, you can customize that behavior below.
-
-## Creating a Bundle
-
-To create a bundle, simply run this from the root of your Cordova/Ionic project:
-
-`./node_modules/.bin/liveupdate-bundle`
-
-You can optionally supply a build number as the first parameter:
-
-`./node_modules/.bin/liveupdate-bundle 123`
-
-By default, this will zip of everything in `platforms/ios/www` and place it in `./liveupdate/`. It will create a `liveupdate.json` there too, which references the latest bundle available.
-
-To cange this behavior, create a `.env` in your project root and use these variables:
-
-```
-BUNDLE_TARGET=`pwd`/liveupdate        # The path to where you would like your bundles to be stored locally for testing
-BUNDLE_SRC=`pwd`/platforms/ios/www    # The path to the web stack files to bundle into your zip
-```
-
-## Testing a Bundle
-
-`cordova-live-update` comes with a mini [express](https://www.npmjs.com/package/express) server to serve your bundles.
-
-To start your local server, run the following command:
-
-`./node_modules/.bin/liveupdate-serve`
-
-By default, this will listen on `127.0.0.1:4000` and will use a web root of `./liveupdate`. Use `BUNDLE_TARGET` and `BUNDLE_PORT` environment variables if you wish to change either of those settings.
-
-Lastly, you need to configure `LiveUpdater` to use your local testing environment. `LiveUpdater` expects you to provide a URL where updates live. It works like this:
-
-1. Fetch `liveupdate.json` from config URL. `liveupdate.json` contains a single integer build number.
-2. Compare build number in `liveupdate.json` with local build number. The initial local build number is supplied in the `LiveUpdate` config but `LiveUpdate` tracks the latest current build number after that. (If you want to override how `LiveUpdate` stores build numbers, look at the config section above).
-3. If the remote build is greater than the local build, `LiveUpdate` downloads `<buildnumber>.zip` from the remote source, unzips it, installs it, and then reboots the application. Youc an override the details of how `LiveUpdate` handles each of these steps. See the config above.
-  
-## Hosting Bundles
-
-Hosting bundles for production use is not recommended until code signing. That said, `LiveUpdater` will happily check and download bundles from any URL you specify.
-
-## Extra
-
-
-It works like this:
-
-1. Include this library in your Cordova-based application
-2. Perform a periodic check by calling `LiveUpdater.go()`
-3. `LiveUpdater` will download, install, and then run updated code bundles
-
-What's included in the bundles? For now, everything. I am looking at ways of providing secure deltas for reduced bandwidth, but for now the
-entire zip bundle of web stack logic is transmitted in the update.
-
-A major security concern for live updates is the [man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack) whereby some attacker
-pretends to serve an updated zip that is infact malaicious code. Until I implement code signing, I recommend using this package only during
-development and on trusted networks.

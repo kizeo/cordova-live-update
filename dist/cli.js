@@ -5,6 +5,8 @@ var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefau
 
 var _regenerator = _interopRequireDefault(require("@babel/runtime/regenerator"));
 
+var _objectSpread2 = _interopRequireDefault(require("@babel/runtime/helpers/objectSpread"));
+
 var _asyncToGenerator2 = _interopRequireDefault(require("@babel/runtime/helpers/asyncToGenerator"));
 
 var _commander = _interopRequireDefault(require("commander"));
@@ -29,29 +31,31 @@ var _fs = _interopRequireDefault(require("fs"));
 
 var _mkdirp = _interopRequireDefault(require("mkdirp"));
 
-function simpleFileWriteSync(filePath, content) {
+var _os = _interopRequireDefault(require("os"));
+
+function simpleWriteFileSync(filePath, content) {
   var options = {
     encoding: 'utf-8',
     flag: 'w'
   };
 
   _fs.default.writeFileSync(filePath, content, options);
-
-  console.log('Write file data complete.');
 }
 
-var liveInfo = {
-  build: 0
-};
+function simpleReadFileSync(filePath) {
+  return _fs.default.readFileSync(filePath, 'utf8');
+}
+
+;
 (0, _asyncToGenerator2.default)(
 /*#__PURE__*/
 _regenerator.default.mark(function _callee3() {
-  var rootConfig, ROOT, build, buildWatch;
+  var rootConfig, ROOT, ip, ifaces, dev, iface, build, buildWatch;
   return _regenerator.default.wrap(function _callee3$(_context3) {
     while (1) {
       switch (_context3.prev = _context3.next) {
         case 0:
-          buildWatch = function _ref5(watchRoot, buildDirectory) {
+          buildWatch = function _ref5(watchRoot, buildDirectory, liveInfo) {
             console.log("Liveupdate bundler monitoring ".concat(watchRoot, " for changes"));
             var buildFilePath = "".concat(watchRoot, "/liveupdate.js");
 
@@ -60,13 +64,17 @@ _regenerator.default.mark(function _callee3() {
                 return f !== buildFilePath && f.match(/hot-update/) === null;
               }
             }, _lodash.default.debounce(function (f, curr, prev) {
-              build(buildFilePath, buildDirectory);
+              build(buildFilePath, buildDirectory, liveInfo);
             }, 1000));
           };
 
-          build = function _ref4(buildFilePath, buildDirectory) {
-            liveInfo.build = new Date().getTime();
-            var buildInfo = "window.LIVEUPDATE=".concat(JSON.stringify(liveInfo), ";");
+          build = function _ref4(buildFilePath, buildDirectory, liveInfo) {
+            var finalInfo = (0, _objectSpread2.default)({
+              currentBuildId: new Date().getTime()
+            }, liveInfo);
+            var finalInfoSerialized = JSON.stringify(finalInfo, null, 2);
+            var lib = simpleReadFileSync(_path.default.join(__dirname, './LiveUpdate.js'));
+            var buildInfo = "\n    ".concat(lib, "\n    document.addEventListener(\"deviceready\", (()=> {\n      LiveUpdate.startLiveUpdating(").concat(finalInfoSerialized, ")\n    }), false)\n    ");
             console.log("Running 'cordova prepare'");
             var prepare = (0, _child_process.exec)('cordova prepare', {
               cwd: ROOT
@@ -90,7 +98,7 @@ _regenerator.default.mark(function _callee3() {
 
                   _mkdirp.default.sync(archiveRoot);
 
-                  var outputName = "".concat(archiveRoot, "/").concat(liveInfo.build, ".zip");
+                  var outputName = "".concat(archiveRoot, "/").concat(finalInfo.currentBuildId, ".zip");
                   console.log("Writing ".concat(outputName));
 
                   var output = _fs.default.createWriteStream(outputName);
@@ -103,8 +111,10 @@ _regenerator.default.mark(function _callee3() {
                   });
                   output.on('close', function () {
                     console.log(archive.pointer() + ' total bytes');
-                    console.log("Writing new buildInfo to source: ".concat(buildInfo));
-                    simpleFileWriteSync(buildFilePath, buildInfo);
+                    console.log("Writing LiveInfo client bootstrap:\n".concat(finalInfoSerialized));
+                    simpleWriteFileSync(buildFilePath, buildInfo);
+                    console.log('Writing LiveInfo server meta');
+                    simpleWriteFileSync("".concat(buildDirectory, "/liveinfo.json"), finalInfoSerialized);
                   });
                   output.on('end', function () {
                     console.log('Data has been drained');
@@ -139,14 +149,25 @@ _regenerator.default.mark(function _callee3() {
         case 7:
           ROOT = _path.default.dirname(rootConfig);
           console.log("Cordova root is ".concat(ROOT));
+          ip = null;
+          ifaces = _os.default.networkInterfaces();
 
-          _commander.default.command('serve').option('-h, --host [host]', 'Host [0.0.0.0]', '0.0.0.0').option('-p, --port [port]', 'Port [4000]', '4000').option('-w, --watch [directory]', 'Directory to watch for changes [www]', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory (webroot) [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).action(
+          for (dev in ifaces) {
+            iface = ifaces[dev].filter(function (details) {
+              return details.family === 'IPv4' && details.internal === false;
+            });
+            if (iface.length > 0) ip = iface[0].address;
+          }
+
+          console.log("External IP looks like: ".concat(ip));
+
+          _commander.default.command('serve').option('-h, --host [host]', 'Host [0.0.0.0]', '0.0.0.0').option('-p, --port [port]', 'Port [4000]', '4000').option('-w, --watch [directory]', 'Directory to watch for changes [www]', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory (webroot) [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).option('-e, --external [url]', 'The external URL of this dev server [http://{$ip}:4000]', null).action(
           /*#__PURE__*/
           function () {
             var _ref2 = (0, _asyncToGenerator2.default)(
             /*#__PURE__*/
             _regenerator.default.mark(function _callee(cmd) {
-              var app;
+              var app, updateUrl;
               return _regenerator.default.wrap(function _callee$(_context) {
                 while (1) {
                   switch (_context.prev = _context.next) {
@@ -161,12 +182,21 @@ _regenerator.default.mark(function _callee3() {
                       app.listen(cmd.port, cmd.host);
                       app.get('/', function (req, res) {
                         res.setHeader('Content-Type', 'application/json');
-                        res.send(JSON.stringify(liveInfo));
+                        res.send(simpleReadFileSync("".concat(cmd.directory, "/liveinfo.json")));
                       });
-                      buildWatch(cmd.watch, cmd.directory);
+                      updateUrl = cmd.external;
+
+                      if (~updateUrl) {
+                        updateUrl = "http://".concat(ip, ":").concat(cmd.port);
+                      }
+
+                      buildWatch(cmd.watch, cmd.directory, {
+                        updateUrl: updateUrl,
+                        recheckTimeoutMs: 500
+                      });
                       console.log("Serving http://".concat(cmd.host, ":").concat(cmd.port, " from ").concat(cmd.directory));
 
-                    case 7:
+                    case 9:
                     case "end":
                       return _context.stop();
                   }
@@ -179,7 +209,7 @@ _regenerator.default.mark(function _callee3() {
             };
           }());
 
-          _commander.default.command('bundle').option('-w, --watch [directory]', 'Watch for changes and re-bundle', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).action(
+          _commander.default.command('bundle').option('-w, --watch [directory]', 'Watch for changes and re-bundle', _path.default.join(ROOT, 'www')).option('-d, --directory [directory]', 'Target bundle directory [<project root>/liveupdate]', _path.default.join(ROOT, 'liveupdate')).option('-u, --updateurl [url]', 'The production LiveUpdate URL/endpoint', null).action(
           /*#__PURE__*/
           function () {
             var _ref3 = (0, _asyncToGenerator2.default)(
@@ -189,11 +219,19 @@ _regenerator.default.mark(function _callee3() {
                 while (1) {
                   switch (_context2.prev = _context2.next) {
                     case 0:
+                      if (!~cmd.updateurl) {
+                        _context2.next = 2;
+                        break;
+                      }
+
+                      throw new Error('You must provide an Update URL endpoint when bundling.');
+
+                    case 2:
                       if (cmd.watch) {
                         buildWatch(cmd.watch, cmd.directory);
                       }
 
-                    case 1:
+                    case 3:
                     case "end":
                       return _context2.stop();
                   }
@@ -208,7 +246,7 @@ _regenerator.default.mark(function _callee3() {
 
           _commander.default.parse(process.argv);
 
-        case 12:
+        case 16:
         case "end":
           return _context3.stop();
       }

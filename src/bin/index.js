@@ -10,17 +10,15 @@ import glob from 'glob'
 import archiver from 'archiver'
 import fs from 'fs'
 import mkdirp from 'mkdirp'
+import os from 'os'
 
-function simpleFileWriteSync(filePath, content) {
+function simpleWriteFileSync(filePath, content) {
   var options = { encoding: 'utf-8', flag: 'w' }
-
   fs.writeFileSync(filePath, content, options)
-
-  console.log('Write file data complete.')
 }
 
-let liveInfo = {
-  build: 0,
+function simpleReadFileSync(filePath) {
+  return fs.readFileSync(filePath, 'utf8')
 }
 
 ;(async function() {
@@ -33,9 +31,29 @@ let liveInfo = {
   const ROOT = path.dirname(rootConfig)
   console.log(`Cordova root is ${ROOT}`)
 
-  function build(buildFilePath, buildDirectory) {
-    liveInfo.build = new Date().getTime()
-    const buildInfo = `window.LIVEUPDATE=${JSON.stringify(liveInfo)};`
+  let ip = null
+  let ifaces = os.networkInterfaces()
+  for (let dev in ifaces) {
+    const iface = ifaces[dev].filter(function(details) {
+      return details.family === 'IPv4' && details.internal === false
+    })
+    if (iface.length > 0) ip = iface[0].address
+  }
+  console.log(`External IP looks like: ${ip}`)
+
+  function build(buildFilePath, buildDirectory, liveInfo) {
+    const finalInfo = {
+      currentBuildId: new Date().getTime(),
+      ...liveInfo,
+    }
+    const finalInfoSerialized = JSON.stringify(finalInfo, null, 2)
+    const lib = simpleReadFileSync(path.join(__dirname, './LiveUpdate.js'))
+    const buildInfo = `
+    ${lib}
+    document.addEventListener("deviceready", (()=> {
+      LiveUpdate.startLiveUpdating(${finalInfoSerialized})
+    }), false)
+    `
     console.log(`Running 'cordova prepare'`)
     const prepare = exec('cordova prepare', { cwd: ROOT }, function(
       err,
@@ -57,7 +75,7 @@ let liveInfo = {
           const archiveRoot = `${buildDirectory}/${platformName}`
           console.log(`Bundling ${platformName}`)
           mkdirp.sync(archiveRoot)
-          const outputName = `${archiveRoot}/${liveInfo.build}.zip`
+          const outputName = `${archiveRoot}/${finalInfo.currentBuildId}.zip`
           console.log(`Writing ${outputName}`)
           var output = fs.createWriteStream(outputName)
           var archive = archiver('zip', {
@@ -65,8 +83,15 @@ let liveInfo = {
           })
           output.on('close', function() {
             console.log(archive.pointer() + ' total bytes')
-            console.log(`Writing new buildInfo to source: ${buildInfo}`)
-            simpleFileWriteSync(buildFilePath, buildInfo)
+            console.log(
+              `Writing LiveInfo client bootstrap:\n${finalInfoSerialized}`,
+            )
+            simpleWriteFileSync(buildFilePath, buildInfo)
+            console.log('Writing LiveInfo server meta')
+            simpleWriteFileSync(
+              `${buildDirectory}/liveinfo.json`,
+              finalInfoSerialized,
+            )
           })
           output.on('end', function() {
             console.log('Data has been drained')
@@ -85,7 +110,7 @@ let liveInfo = {
     })
   }
 
-  function buildWatch(watchRoot, buildDirectory) {
+  function buildWatch(watchRoot, buildDirectory, liveInfo) {
     console.log(`Liveupdate bundler monitoring ${watchRoot} for changes`)
     const buildFilePath = `${watchRoot}/liveupdate.js`
     watch.watchTree(
@@ -94,7 +119,7 @@ let liveInfo = {
         filter: f => f !== buildFilePath && f.match(/hot-update/) === null,
       },
       _.debounce((f, curr, prev) => {
-        build(buildFilePath, buildDirectory)
+        build(buildFilePath, buildDirectory, liveInfo)
       }, 1000),
     )
   }
@@ -113,6 +138,11 @@ let liveInfo = {
       'Target bundle directory (webroot) [<project root>/liveupdate]',
       path.join(ROOT, 'liveupdate'),
     )
+    .option(
+      '-e, --external [url]',
+      'The external URL of this dev server [http://{$ip}:4000]',
+      null,
+    )
     .action(async cmd => {
       express.static.mime.define({
         'application/json': ['json'],
@@ -123,10 +153,16 @@ let liveInfo = {
       app.listen(cmd.port, cmd.host)
       app.get('/', (req, res) => {
         res.setHeader('Content-Type', 'application/json')
-        res.send(JSON.stringify(liveInfo))
+        res.send(simpleReadFileSync(`${cmd.directory}/liveinfo.json`))
       })
-
-      buildWatch(cmd.watch, cmd.directory)
+      let updateUrl = cmd.external
+      if (~updateUrl) {
+        updateUrl = `http://${ip}:${cmd.port}`
+      }
+      buildWatch(cmd.watch, cmd.directory, {
+        updateUrl,
+        recheckTimeoutMs: 500,
+      })
       console.log(
         `Serving http://${cmd.host}:${cmd.port} from ${cmd.directory}`,
       )
@@ -144,7 +180,18 @@ let liveInfo = {
       'Target bundle directory [<project root>/liveupdate]',
       path.join(ROOT, 'liveupdate'),
     )
+    .option(
+      '-u, --updateurl [url]',
+      'The production LiveUpdate URL/endpoint',
+      null,
+    )
+
     .action(async cmd => {
+      if (~cmd.updateurl) {
+        throw new Error(
+          'You must provide an Update URL endpoint when bundling.',
+        )
+      }
       if (cmd.watch) {
         buildWatch(cmd.watch, cmd.directory)
       }

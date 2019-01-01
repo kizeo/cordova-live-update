@@ -9,6 +9,7 @@ const libraryConfig = {
   mode: 'development',
   output: {
     path: path.resolve(__dirname, 'dist'),
+    library: 'LiveUpdate',
     libraryTarget: 'umd',
   },
   module: {

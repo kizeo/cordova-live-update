@@ -1,1 +1,1 @@
-export * from './LiveUpdate'
+export * from './LiveUpdater'

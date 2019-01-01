@@ -8,5 +8,9 @@ module.exports = {
     "globals": {
         "NODE_ENV": true,
         "LIVEUPDATE": true,
+        "cordova": true,
+        "confirm": true,
+        "alert": true,
+        "localStorage": true,
     }
 };
