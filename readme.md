@@ -1,5 +1,7 @@
 # cordova-live-update
 
+## V2, fresh and ready for 2019!
+
 `cordova-live-update` provides secure over-the-air web stack updates for Cordova applications. Many updates to hybrid applications involve
 only web stack (JavaScript/HTML/CSS/fonts) changes and no native code changes at all. With this package, you can provide your users convenient
 OTA updates like Expo does!
