@@ -52,8 +52,8 @@ function simpleReadFileSync(filePath) {
     ${lib}
     LiveUpdater.buildManifest = ${finalInfoSerialized};
     document.addEventListener("deviceready", (()=> {
-      const liveUpdater = LiveUpdater(LiveUpdater.buildManifest);
-      liveUpdater.checkRepeatedly();
+      const LiveUpdater.instance = LiveUpdater(LiveUpdater.buildManifest);
+      LiveUpdater.instance.checkRepeatedly();
     }), false)
     `
     console.log(`Running 'cordova prepare'`)
