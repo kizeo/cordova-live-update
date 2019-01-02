@@ -1,7 +1,6 @@
 var path = require('path')
-const webpack = require('webpack')
 
-const libraryConfig = {
+module.exports = {
   target: 'web',
   entry: {
     LiveUpdate: './src/index.js',
@@ -43,31 +42,3 @@ const libraryConfig = {
   },
   plugins: [],
 }
-
-const binConfig = {
-  target: 'node',
-  entry: {
-    cli: './src/bin/index.js',
-  },
-  output: {
-    path: path.resolve(__dirname, 'dist'),
-  },
-  mode: 'development',
-
-  module: {
-    rules: [
-      {
-        test: /\.(js|jsx)$/,
-        exclude: /node_modules/,
-        use: {
-          loader: 'babel-loader',
-        },
-      },
-    ],
-  },
-  plugins: [
-    new webpack.BannerPlugin({ banner: '#!/usr/bin/env node', raw: true }),
-  ],
-}
-
-module.exports = [libraryConfig]
