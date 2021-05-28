@@ -272,11 +272,11 @@
           })
           ['finally'](function () {
             console.log('Navigating to ', app_html)
-            return (window.location = app_html)
+            return window.open(app_html)
           })
       } else {
         console.log('Navigating to ', app_html)
-        return (window.location = app_html)
+        return window.open(app_html)
       }
     }
 
